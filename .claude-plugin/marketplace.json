@@ -1,14 +1,14 @@
 {
-  "name": "lichengwu",
+  "name": "lichen",
   "owner": {
     "name": "lichengwu"
   },
   "plugins": [
     {
-      "name": "lichengwu-skills",
+      "name": "lichen",
       "source": "./",
-      "description": "Field-tested skills from a home lab: infra ops, macOS, 3D making, and agent workflows.",
-      "version": "0.3.0"
+      "description": "A self-evolving skill framework for AI coding agents: passive signal hooks, governed evolution with a human gate, and hub-based multi-agent distribution.",
+      "version": "0.6.0"
     }
   ]
 }

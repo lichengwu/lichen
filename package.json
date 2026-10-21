@@ -11,7 +11,6 @@
     "check": "bash scripts/check.sh",
     "redact": "bash scripts/redact.sh",
     "redact:apply": "bash scripts/apply-redaction.sh",
-    "changeset": "changeset",
     "fw": "python3 framework/bin/lichen",
     "fw:init": "python3 framework/bin/lichen init",
     "fw:status": "python3 framework/bin/lichen status",
@@ -20,8 +19,5 @@
     "fw:export": "python3 framework/bin/lichen export",
     "fw:import": "python3 framework/bin/lichen import",
     "fw:install-hooks": "python3 framework/bin/lichen install-hooks"
-  },
-  "devDependencies": {
-    "@changesets/cli": "^2.27.0"
   }
 }
