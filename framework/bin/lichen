@@ -26,6 +26,7 @@
                                  hub 仓库：使用积累的 SSOT（ADR 0004，默认 ~/Skills）
   lichen agents list|sync|doctor
                                  多 agent 物化：hub → 各 agent 技能目录（技能级 symlink）
+  lichen version|upgrade         版本信息 / 从最新 release 自更新
 
 设计宪法见 .agents/adr/0002-self-evolving-framework.md。
 """
@@ -602,12 +603,45 @@ def cmd_agents_doctor(args) -> int:
 
 # ---------- 入口 ----------
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _version_string() -> str:
+    try:
+        data = json.loads((_REPO_ROOT / "package.json").read_text())
+        return str(data.get("version", "unknown"))
+    except (OSError, ValueError):
+        return "unknown"
+
+
+def cmd_version(args) -> int:
+    print(f"lichen {_version_string()}")
+    return 0
+
+
+def cmd_upgrade(args) -> int:
+    """Self-update: re-run the official installer against the latest release."""
+    url = "https://raw.githubusercontent.com/lichengwu/lichen/main/install.sh"
+    print("lichen upgrade: fetching the latest installer ...")
+    rc = subprocess.run(["sh", "-c", f'curl -fsSL "{url}" | sh']).returncode
+    if rc == 0:
+        print("lichen upgrade: done. Run 'lichen version' to confirm.")
+    else:
+        print("lichen upgrade: failed. You can also update via git pull if you cloned the repo.")
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="lichen", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version",
+                    version=f"lichen {_version_string()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init", help="初始化运行状态（幂等）").set_defaults(fn=cmd_init)
+
+    sub.add_parser("version", help="print the framework version").set_defaults(fn=cmd_version)
+    sub.add_parser("upgrade", help="update an installed lichen to the latest release").set_defaults(fn=cmd_upgrade)
 
     p = sub.add_parser("status", help="系统状态")
     p.set_defaults(fn=cmd_status)

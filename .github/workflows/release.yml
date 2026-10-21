@@ -1,43 +1,38 @@
-# Release：版本 bump（仍需人工合并 PR）
-# 触发：push 到 main
-# 职责：用 changesets 开版本 bump PR。
-# 注意：不开 release、不 push tag、不通知任何外部渠道——合版本 PR 由佐井本人决定，
-#       与 scripts/publish.sh 的人工确认门是同一原则：任何对外变化都要人点头。
+# Release：tag 驱动的发布流水线。
+# 触发：push v* tag（见 RELEASING.md）
+# 职责：git archive 打 tarball + SHA-256 → 创建 GitHub Release（自动 notes）→ 传资产。
+# 原则不变：发布只由人工打 tag 触发；本 workflow 不做任何自动化版本决策。
 name: release
 
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  version:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - run: npm install --no-save @changesets/cli
-
-      - name: Open / update version PR
-        run: npx changeset version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Commit version bump
+      - name: Build release tarball
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: version skills"
-            git push
-          fi
+          set -eu
+          V="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz -o "lichen-${V}.tar.gz" "$GITHUB_REF_NAME"
+          sha256sum "lichen-${V}.tar.gz" > "lichen-${V}.tar.gz.sha256"
+          cat "lichen-${V}.tar.gz.sha256"
+
+      - name: Create GitHub Release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "lichen ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            lichen-*.tar.gz lichen-*.tar.gz.sha256

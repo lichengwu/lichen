@@ -1,0 +1,30 @@
+# Categorize auto-generated release notes (used by `gh release --generate-notes`).
+changelog:
+  exclude:
+    labels:
+      - chore
+      - ci
+  categories:
+    - title: "⚠️ Breaking changes"
+      labels:
+        - breaking
+        - breaking-change
+    - title: "✨ Features"
+      labels:
+        - feat
+        - feature
+        - enhancement
+    - title: "🐛 Fixes"
+      labels:
+        - bug
+        - fix
+    - title: "🔒 Security"
+      labels:
+        - security
+    - title: "📝 Documentation"
+      labels:
+        - docs
+        - documentation
+    - title: "Other changes"
+      labels:
+        - "*"

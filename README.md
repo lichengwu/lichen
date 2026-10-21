@@ -1,141 +1,196 @@
-<p>
-  <a href="https://github.com/lichengwu/lichen">
-    <img alt="lichen" src="https://img.shields.io/github/stars/lichengwu/lichen?style=flat" width="96">
-  </a>
-</p>
+<div align="center">
 
 # lichen
 
-> A self-evolving skill framework. Clone it, use your agent as usual — the framework watches, learns, and grows **your** skill system in the background. Export when ready; import anywhere. Fork it and it becomes yours.
+**A self-evolving skill framework for AI coding agents.**
 
-**这不只是一个技能库，是一个可以自己进化的技能系统框架。** clone 下来 → 正常用 agent → 框架在后台自动识别值得沉淀的模式、收编本地技能、修补技能卫生问题 → 积累一段时间后一键导出，导入到其他项目 / 电脑 / 给其他人。使用过程中你不需要感知它的存在——除非有事必须找你。
+[![CI](https://github.com/lichengwu/lichen/actions/workflows/ci.yml/badge.svg)](https://github.com/lichengwu/lichen/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/lichengwu/lichen?display_name=tag)](https://github.com/lichengwu/lichen/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
+[![Star it](https://img.shields.io/github/stars/lichengwu/lichen?style=social)](https://github.com/lichengwu/lichen/stargazers)
 
-**上游不带任何个人技能。** 仓库里只有框架本身和几个种子演示技能；你的技能在你的 fork 里长出来。架构决策见 [.agents/adr/0002-self-evolving-framework.md](./.agents/adr/0002-self-evolving-framework.md)。
+`ai-agents` · `agent-skills` · `claude-code` · `codex` · `self-evolving` · `skill-library` · `hooks` · `python`
 
-## 快速开始（30 秒）
+Clone it, use your agent as usual — the framework watches in the background, precipitates
+reusable skills from what your agent actually does, and grows **your** skill system with a
+human gate on anything risky. Export when ready; import anywhere. Fork it and it becomes yours.
+
+[Install](#install) · [Quick start](#quick-start) · [How it works](#how-it-works) · [CLI](#cli) · [Make it yours](#make-it-yours)
+
+</div>
+
+---
+
+## Why
+
+Skill libraries rot. People collect `.md` files, forget what works, and lose track of what
+their agents actually use. lichen treats skills as a **living, governed asset**:
+
+- **Zero-effort capture** — session hooks passively collect usage signals. No dashboards,
+  no daemons, no new workflow: keep using your agent exactly as before.
+- **Automatic evolution** — repeatedly-edited skills get versioned (`generation++`,
+  changelog, snapshots). Repeated intents with no skill coverage become candidate skeletons
+  waiting to be forged.
+- **Human gate on everything risky** — deterministic hygiene fixes run automatically (T0);
+  trust changes, promotions, and deletions always ask you (T1).
+- **Privacy first** — prompts are stored as hashes, never as text. Secret scanning gates
+  every publish.
+- **Boring by design** — Python stdlib only, no daemon, no database. `git clone` is the
+  only dependency.
+
+## Install
+
+**One-line install** (downloads a verified release tarball):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lichengwu/lichen/main/install.sh | sh
+```
+
+**Upgrade** an existing installation:
+
+```bash
+lichen upgrade
+```
+
+**From source** (the fork-and-own workflow — see [Make it yours](#make-it-yours)):
 
 ```bash
 git clone https://github.com/lichengwu/lichen.git
 cd lichen
-
-python3 framework/bin/lichen init           # 初始化本地运行状态
-python3 framework/bin/lichen install-hooks  # 注册无感知自动层（写 settings.json，带备份）
-python3 framework/bin/lichen status         # 查看系统状态
+python3 framework/bin/lichen init
 ```
 
-装完就正常用 agent。框架会：
+Requirements: Python ≥ 3.9, `curl`. No pip packages, no node modules at runtime.
 
-- **自动收编**：本地 `~/.workbuddy/skills` 等目录出现新技能 → 过检后自动收进 `skills/local/`
-- **自动进化留痕**：一个技能被反复编辑 → `generation++` + changelog + 版本快照
-- **自动沉淀候选**：同一意图重复出现 3 次以上且无技能覆盖 → 生成候选骨架，摘要里提醒你锻造
-- **自动卫生修补**：缺 sidecar、invocation 登记不一致、description 缺触发语、场景标签缺失 → 确定性修复
-
-需要它说话时（有待人工裁决的事项），它只在会话开始时注入**最多 3 行**摘要，且自带下一步命令。
-
-## 变成你自己的进化版 Lichen
-
-```
-clone 上游 ──► 正常用 agent ──► skills/local/ 慢慢长出来
-                                    │
-                                    ▼
-                        git push origin <你的 repo>
-                                    │
-                                    ▼
-                         你的专属进化版 Lichen
-                                    ▲
-                                    │  git merge upstream/main（框架更新）
-                                  上游 lichen
-```
+## Quick start
 
 ```bash
-#  fork 后第一次
-python3 framework/bin/lichen init && python3 framework/bin/lichen install-hooks
-
-#  沉淀丰富后，push 到自己的 repo
-git remote add origin git@github.com:<you>/<your>-lichen.git
-git push -u origin main
-
-#  上游框架更新时合并回来
-git remote add upstream https://github.com/lichengwu/lichen.git
-git fetch upstream && git merge upstream/main
+lichen init            # initialize local runtime state (idempotent)
+lichen install-hooks   # register the passive signal hooks (writes settings.json, with backup)
+lichen status          # what the system knows right now
 ```
 
-`framework/`（框架层）和 `framework/state/`（本地运行数据）与你的技能进化**永不冲突**；
-`skills/starter/`（种子技能）你已拥有，可改可删。冲突处置的完整预案在内置技能
-[`skills/starter/lichen-ops`](./skills/starter/lichen-ops/SKILL.md) 第 4 节。
+Then just use your agent. lichen will:
 
-**给上游做贡献**：框架代码（`framework/`、`scripts/`、文档）走 PR；个人技能不要 PR 回上游——
-上游只收种子级技能，个人成果的流通靠 `export` / `import`。
-
-## 内置演示技能（fork 后随你处置）
-
-| 技能 | 演示什么 |
+| Signal | Automatic response |
 |---|---|
-| `starter/lichen-ops` | **如何管理这个框架自身**：CLI 全命令、桶语义、T0/T1、fork-merge、发布纪律、排障。框架自产的「框架管理对象」活样本 |
-| `borrowed/writing-skills` | 如何写好 skill（TDD-for-skills：先看 agent 没有技能时怎么失败） |
-| `borrowed/skill-creator` | 如何写好 skill（Anthropic 官方闭环：草稿→eval→迭代→description 优化） |
-| `borrowed/writing-for-agents` | 如何写好 skill 的文档（指针、负载、层级） |
+| A local skill appears in a watched directory | Adopted into the hub after validation |
+| A skill gets edited repeatedly | `generation++` + changelog + version snapshot |
+| The same intent repeats 3+ times with no skill | A candidate skeleton is forged, surfaced in the digest |
+| Missing sidecar / stale metadata / hygiene drift | Deterministic repair (T0) |
+| Anything irreversible | A ≤3-line digest asks you (T1) |
 
-这些技能同时演示了框架的完整治理面：sidecar 账本、场景标签、生命周期、borrowed 同步纪律。
-`skills/local/` 是空的——那是你的进化产物落点（里面有个 README 说明规则）。
+## How it works
 
-## 框架怎么工作（无感知自进化）
+lichen hooks into agent session lifecycle events (`SessionStart`, `UserPromptSubmit`,
+`PostToolUse`, `PreCompact`, `Stop`) and maintains a local signal ledger:
 
-```
-你的 agent 会话（任何项目目录）
-   │  hooks：SessionStart / UserPromptSubmit / PostToolUse / Stop / PreCompact
-   ▼
-framework/（runtime 层——你感知不到它）
-   │  信号：技能写入 · 技能调用 · 本地新技能 · 重复意图
-   ▼
-analyze → 决策分级
-   ├─ T0 自动执行：收编 / generation++ 留痕 / 候选 scaffold / 卫生修补 / 场景轴回填
-   └─ T1 人工门：上游合并 / 导入冲突 / 未分类 / 删除技能 / 任何 push
-   ▼
-摘要（≤3 行，自包含指令）——只在有正事时出现
-```
+1. **Signals** — every request, skill load, file view, and edit is counted (never logged
+   as text; prompts are hashed).
+2. **Evolution pass** — a locked, rate-limited job (`lichen evolve --apply`, ≤10 auto
+   actions/day) turns signals into: adoptions, version bumps, candidate skeletons, hygiene
+   fixes.
+3. **Governance** — every skill carries a three-axis sidecar: `kind` / `visibility`
+   (public|private) / `execution` (auto|manual|hybrid), plus a 30-day probation for
+   auto-created assets. Low-usage probationers get archived — by nomination, never silently.
+4. **Hub** — your accumulated skills live in a separate hub repository (flat, standard
+   Agent Skills format) that any agent can consume directly, and that can be published,
+   shared, or synced without touching the framework.
 
-- **hooks 是加速器，不是依赖**：不支持的 harness（如 Codex）用 CLI 手动跑 `framework evolve`，或挂 cron。所有自动能力在 CLI 里完整存在。
-- **隐私铁律**：意图信号只存 prompt 的 sha256 与粗词元，原文永不落盘。
-- **静默纪律**：默认沉默；PostToolUse/UserPromptSubmit 只记录不输出；Stop 最多一行。
-- **兼容 harness**：Claude Code / CodeBuddy / WorkBuddy（hooks 格式同构）；详见 [framework/hooks/README.md](./framework/hooks/README.md)。
+Architecture decisions: [`.agents/adr/`](.agents/adr/) · Scope & non-goals: [`SCOPE.md`](SCOPE.md)
 
-## 导出与导入（进化成果走出去）
+## CLI
 
-```bash
-# 导出（本地包，不推送）
-python3 framework/bin/lichen export --name my-skills --include-config
-#   → dist/my-skills/ + dist/my-skills.zip（MANIFEST + 逐文件 sha256）
-
-# 导入（其他电脑 / 其他项目 / 其他人）
-python3 framework/bin/lichen import path/to/my-skills.zip
-```
-
-导入规则（宪法级）：**本地已进化（generation > 0）的技能永不因导入被静默覆盖**。双方都改过的走逐行三方合并；合并不了就双方暂存、挂人工裁决，不许猜。协议细节见 [framework/README.md](./framework/README.md)。
-
-## 这个仓库自己的纪律
-
-- **[SCOPE.md](./SCOPE.md)**：上游收录政策 + fork 模型 + 脱敏政策 + T0/T1 策略分级。
-- **[GLOSSARY.md](./GLOSSARY.md)**：领域语言，技能文档统一使用。
-- **[.agents/invocation.md](./.agents/invocation.md)**：user-invoked（编排）/ model-invoked（纪律）双层调用协议。
-- **[skills/starter/lichen-ops](./skills/starter/lichen-ops/SKILL.md)**：管理这个框架的使用说明书（内置技能）。
-- **[framework/](./framework/)**：自进化运行时。hooks + lib（stdlib-only Python）+ CLI。设计宪法在 [.agents/adr/](./.agents/adr/)。
-- **scripts/**：`sync.sh`（本地→仓库同步+脱敏+暂存）、`publish.sh`（唯一发布入口，**人工确认门**）、`redact.sh`（敏感信息扫描，硬红线命中即失败）、`check.sh`（结构检查 + 框架编译检查）。
-
-### 同步与发布（人工确认门）
+One entry point, three command families:
 
 ```
-本地 ~/.workbuddy/skills
-   │  bash scripts/sync.sh        # rsync 白名单技能 + 自动脱敏 + git add（不提交）
-   ▼
-仓库暂存区
-   │  bash scripts/publish.sh     # check + redact + 变更摘要 + 人工输入 CONFIRM
-   ▼
-git commit →（--push 时）git push origin
+lichen                  lifecycle & governance
+lichen hub <sub>        your accumulated skill repository (SSOT)
+lichen agents <sub>     distribute hub skills into each agent's directory
 ```
 
-没有任何 cron、hook 或 CI 能绕过 `publish.sh` 直接推送。框架的 hooks 与 CLI 只写本地。CI 只做检查（secret scan + 结构检查 + 框架编译），不做发布。
+| Command | Purpose |
+|---|---|
+| `lichen init` | Initialize runtime state (idempotent) |
+| `lichen status` | Human-readable system status |
+| `lichen list` | Browse skills by category / bucket / origin |
+| `lichen categorize` | Tag skills with scenario categories |
+| `lichen evolve [--apply]` | Analyze signals; `--apply` executes T0 actions (dry-run by default) |
+| `lichen adopt <path>` | Manually adopt a local skill |
+| `lichen promote <id>` | Promote a forged candidate |
+| `lichen run <id>` | Execute a manual skill (records usage signal) |
+| `lichen trust <id> <confirm\|revoke>` | Human trust gate |
+| `lichen evaluate / rollback / archive / unarchive` | Version & lifecycle maintenance |
+| `lichen export / import` | skillpack/1 exchange (three-way merge, local evolution never clobbered) |
+| `lichen install-hooks / uninstall-hooks` | Register/remove session hooks |
+| `lichen update-check` | Check upstream drift for borrowed skills |
+| `lichen doctor` | Self-check hooks, sidecars, and state files |
+| `lichen version / upgrade` | Version info / self-update |
+| `lichen hub init\|use\|status\|migrate\|publish\|import\|promote` | Hub repository operations |
+| `lichen agents list\|sync\|doctor` | Materialize hub skills as per-skill symlinks into agent dirs |
 
-## 许可证
+## Make it yours
 
-MIT，见 [LICENSE](./LICENSE)。`skills/borrowed/` 内各技能的原始版权归其上游作者：Matt Pocock（mattpocock/skills，MIT）、Anthropic（anthropics/skills，Apache-2.0，随附 LICENSE.txt）、Jesse Vincent（obra/superpowers，MIT）。明细见 [`skills/borrowed/CREDITS.md`](./skills/borrowed/CREDITS.md)。
+lichen is designed to be forked, not just installed:
+
+```
+fork upstream ──► use your agent daily ──► your hub grows ──► push it as YOUR repo
+                     ▲                                                        │
+                     └────────── merge upstream updates, keep evolving ◄──────┘
+```
+
+- The **upstream framework** never contains personal skills — only the engine plus a few
+  seed skills. Your fork's history stays clean for merges.
+- **Borrowed seeds** (`skills/borrowed/`) track upstream drift via `lichen update-check`.
+- Exchange with others via content-addressed skill packs: `lichen export` / `lichen import`
+  with three-way merge — their updates never overwrite your local evolution.
+
+## Multi-agent distribution
+
+One hub, many agents. `lichen agents sync` materializes per-skill symlinks into each
+supported agent's skill directory (idempotent, conflict-safe):
+
+| Agent | Status |
+|---|---|
+| Claude Code | supported (`~/.claude/skills`) |
+| Codex | supported (`~/.agents/skills`) |
+| pi | supported (`~/.agents/skills`, shared with Codex) |
+| Qwen Code | supported (`~/.qwen/skills`) |
+| WorkBuddy | adoption surface (creative layer) |
+| Junie | planned |
+
+Native readers of `~/.agents/skills` (Cursor, Copilot CLI, OpenCode, …) work with zero
+extra configuration.
+
+## Privacy
+
+- Prompts and file paths are stored as **hashes**, not text.
+- `visibility=private` skills are excluded from every publish path — structurally, not by
+  convention.
+- Publish gates run secret scanning; hard-pattern hits fail the build.
+- Your signal ledger and hub live entirely on your machine.
+
+## Project layout
+
+```
+framework/
+  bin/lichen          CLI entry point
+  lib/                engine (evolution, taxonomy, exchange, hub, agents, …)
+  hooks/              session lifecycle hooks
+  config.default.json configuration template (machine-local overrides in state/)
+skills/
+  starter/            demo skills: how to manage this framework
+  borrowed/           upstream-tracked seed skills
+scripts/              check / redact / publish gates
+install.sh            installer (release tarball + checksum verify)
+```
+
+## Contributing
+
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Security concerns:
+[SECURITY.md](SECURITY.md). Release process: [RELEASING.md](RELEASING.md).
+
+## License
+
+[MIT](LICENSE)
