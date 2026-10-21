@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Test suite** (`scripts/test.sh` + `framework/tests/`): fully sandboxed
+  harness — repo copy + fake `HOME`, so tests never touch the real machine.
+  21 stdlib unit tests (taxonomy, meta, merge3, lock) plus a 9-step end-to-end
+  pipeline (init → evolve adoption → fail-safe visibility → idempotency →
+  agents sync → quarantine/promote → exchange roundtrip). CI runs it on
+  Ubuntu and macOS.
+- `CONTRIBUTING.md` now documents the testing workflow and sandbox semantics.
+
+### Fixed
+
+- `merge3.merge_text` dropped the trailing newline when merging text that
+  ended with one, producing "no newline at end of file" diff noise in merged
+  skills.
+
 ## [0.6.0] - 2026-10-21
 
 First public release of the framework skeleton.

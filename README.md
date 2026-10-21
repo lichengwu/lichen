@@ -188,8 +188,10 @@ install.sh            installer (release tarball + checksum verify)
 
 ## Contributing
 
-Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Security concerns:
-[SECURITY.md](SECURITY.md). Release process: [RELEASING.md](RELEASING.md).
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The full test
+suite runs in a disposable sandbox (your machine is never touched):
+`sh scripts/test.sh`. Security concerns: [SECURITY.md](SECURITY.md). Release
+process: [RELEASING.md](RELEASING.md).
 
 ## License
 

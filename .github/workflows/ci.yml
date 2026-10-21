@@ -1,7 +1,11 @@
-# CI：检查门（不发布）
-# 触发：PR + push 到 main
-# 职责：secret scan + 结构检查 + skills/ 变更必须带 CHANGELOG 条目
-# 注意：本 workflow 没有任何 push / release 动作——发布只走 tag（见 RELEASING.md）
+# CI: check gates (never publishes).
+# Triggers: PRs and pushes to main.
+# Jobs:
+#   check — secret scan, structure check, changelog gate, syntax check
+#   test  — full sandbox test suite (unit + end-to-end) on Linux and macOS;
+#           runs entirely in a temp sandbox (fake HOME + repo copy), never
+#           touches the runner's real environment
+# Note: no push / release actions here — releases are tag-driven (RELEASING.md).
 name: ci
 
 on:
@@ -35,3 +39,15 @@ jobs:
       - name: Syntax check (python 3.9 compatibility)
         run: |
           python3 -m py_compile framework/bin/lichen framework/lib/*.py framework/hooks/*.py
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sandbox test suite (unit + E2E, fully isolated)
+        run: sh scripts/test.sh

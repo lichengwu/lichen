@@ -76,7 +76,11 @@ def merge_text(base: str, ours: str, theirs: str):
         i = j
 
     result.extend(b[pos:])
-    return "\n".join(result), conflicts
+    text = "\n".join(result)
+    # join 丢尾换行：原文本以 \n 结尾时补回，避免制造 "no newline at EOF" diff 噪声
+    if ours.endswith("\n") and not text.endswith("\n"):
+        text += "\n"
+    return text, conflicts
 
 
 def merge_files(base_dir, ours_dir, theirs_dir, rel: str):

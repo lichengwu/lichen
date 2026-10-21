@@ -28,7 +28,7 @@ framework/
 skills/
   starter/lichen-ops  demo skill: how to operate this framework
   borrowed/           upstream-tracked seed skills (drift checked via `lichen update-check`)
-scripts/              gates: check.sh (structure) · redact.sh (secret scan) · publish.sh (human-gated commit/push)
+scripts/              gates: check.sh (structure) · redact.sh (secret scan) · test.sh (unit + sandbox E2E) · publish.sh (human-gated commit/push)
 install.sh            installer: release tarball + SHA-256 → ~/.lichen + ~/.local/bin/lichen
 .agents/adr/          architecture decision records — read 0002 first
 ```
@@ -92,6 +92,7 @@ Requirements: Python ≥ 3.9. There are **no runtime dependencies** and no build
    bash scripts/check.sh                                                # structure
    bash scripts/redact.sh                                               # secret scan
    python3 -m py_compile framework/bin/lichen framework/lib/*.py framework/hooks/*.py
+   sh scripts/test.sh                                                   # full suite (sandboxed)
    ./framework/bin/lichen doctor                                        # smoke
    ```
 
@@ -139,17 +140,37 @@ Requirements: Python ≥ 3.9. There are **no runtime dependencies** and no build
 
 ## Testing
 
-There is no formal test framework yet (deliberately — stdlib-only and small).
-Verification today = structure check + secret scan + `py_compile` + `doctor` +
-manual smoke of the affected commands. If you add a nontrivial pure function
-(especially in `analyze.py` / `taxonomy.py` / `merge3.py`), include a small
-`if __name__ == "__main__"` self-check or examples in the docstring.
+Run everything with:
+
+```bash
+sh scripts/test.sh
+```
+
+The harness is **fully sandboxed** — it copies the repository to a temp dir,
+points `HOME` at a fake home, and runs the whole pipeline there. Your real
+`~/Skills`, `~/.agents/*`, and framework `state/` are never touched. Set
+`LICHEN_TEST_KEEP=1` to keep the sandbox for debugging (the path is printed
+on failure).
+
+Two layers:
+
+1. **Unit tests** (`framework/tests/`, stdlib `unittest`): pure-function
+   coverage for `taxonomy`, `meta`, `merge3`, `lock`. Run them directly with
+   `python3 -m unittest discover -s framework/tests -t framework`.
+2. **End-to-end** (in `scripts/test.sh`): init → evolve adoption →
+   fail-safe visibility check → idempotency → agents sync/doctor →
+   quarantine → promote → materialization → export/import roundtrip.
+
+CI runs the full suite on Ubuntu and macOS. When you add a nontrivial pure
+function, add a unit test next to the existing ones rather than a `__main__`
+self-check.
 
 ## PR checklist
 
 - [ ] `bash scripts/check.sh` passes
 - [ ] `bash scripts/redact.sh` passes (no secret-scan hits)
 - [ ] `python3 -m py_compile framework/bin/lichen framework/lib/*.py framework/hooks/*.py` passes
+- [ ] `sh scripts/test.sh` passes (unit + sandbox E2E)
 - [ ] If `skills/` changed: `CHANGELOG.md` entry included
 - [ ] No runtime dependencies added (stdlib-only rule)
 - [ ] No personal/private skills introduced upstream
