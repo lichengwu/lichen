@@ -52,13 +52,18 @@ curl -fsSL "$BASE/lichen-$VNUM.tar.gz.sha256" -o "$TMP/pkg.tar.gz.sha256" ||
   die "checksum download failed"
 
 if command -v sha256sum >/dev/null 2>&1; then
-  echo "$(cat "$TMP/pkg.tar.gz.sha256")" | sha256sum -c - >/dev/null 2>&1 ||
-    die "checksum mismatch"
+  SHA_TOOL="sha256sum"
 elif command -v shasum >/dev/null 2>&1; then
-  echo "$(cat "$TMP/pkg.tar.gz.sha256")" | shasum -a 256 -c - >/dev/null 2>&1 ||
-    die "checksum mismatch"
+  SHA_TOOL="shasum -a 256"
 else
   say "WARNING: no sha256 tool found, skipping verification"
+  SHA_TOOL=""
+fi
+if [ -n "$SHA_TOOL" ]; then
+  expected=$(cut -d' ' -f1 "$TMP/pkg.tar.gz.sha256" | tr -d '[:space:]')
+  actual=$($SHA_TOOL "$TMP/pkg.tar.gz" | cut -d' ' -f1 | tr -d '[:space:]')
+  [ -n "$expected" ] || die "empty checksum file"
+  [ "$expected" = "$actual" ] || die "checksum mismatch (expected $expected, got $actual)"
 fi
 
 # ---- install ----
