@@ -1,0 +1,29 @@
+{
+  "origin": "upstream",
+  "source": "github:mattpocock/skills//skills/productivity/writing-for-agents",
+  "license": "MIT",
+  "upstream_ref": "49dd158d1076",
+  "last_sync": "2026-10-19",
+  "local_edits": [
+    "中文化翻译",
+    "触发语按 WorkBuddy 双读者规则调整",
+    "保留出处声明（CREDITS.md）"
+  ],
+  "invocation": "model",
+  "generation": 1,
+  "changelog": [
+    {
+      "gen": 1,
+      "date": "2026-10-18",
+      "change": "自 mattpocock/skills@49dd158d1076 引入并中文化"
+    },
+    {
+      "gen": 1,
+      "date": "2026-10-21",
+      "change": "自动分类（关键词）：agent"
+    }
+  ],
+  "categories": [
+    "agent"
+  ]
+}

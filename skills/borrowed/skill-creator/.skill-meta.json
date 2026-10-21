@@ -1,0 +1,28 @@
+{
+  "origin": "upstream",
+  "source": "github:anthropics/skills//skills/skill-creator",
+  "license": "Apache-2.0",
+  "upstream_ref": "2026-10-20-intake",
+  "last_sync": "2026-10-20",
+  "local_edits": [
+    "SKILL.md 顶部增加中文适配说明块（上游原文不含）",
+    "未改动任何脚本与 references（保持与上游可 diff）"
+  ],
+  "invocation": "model",
+  "generation": 1,
+  "changelog": [
+    {
+      "gen": 1,
+      "date": "2026-10-20",
+      "change": "自 anthropics/skills 完整引入：SKILL.md + 9 脚本 + 3 agents + eval-viewer + schemas.md，Apache-2.0 LICENSE 随附"
+    },
+    {
+      "gen": 1,
+      "date": "2026-10-21",
+      "change": "自动分类（关键词）：agent"
+    }
+  ],
+  "categories": [
+    "agent"
+  ]
+}

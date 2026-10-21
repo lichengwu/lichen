@@ -1,0 +1,746 @@
+#!/usr/bin/env python3
+"""framework/bin/lichen — 自进化技能框架 CLI。
+
+用法：
+  lichen init                 初始化运行状态（幂等）
+  lichen status               人类可读的系统状态
+  lichen list [--category X] [--bucket Y] [--json]  按场景分组浏览技能（多标签）
+  lichen categorize <技能> <场景...> | --auto | --backfill  场景轴打标/修正
+  lichen evolve [--apply]     分析信号；--apply 才落盘（Stop hook 自动跑的是 apply）
+  lichen doctor               自检（hooks 注册 / sidecar 完整性 / 状态文件）
+  lichen export [选项]        导出技能包（skillpack/1）
+  lichen import <包>          导入技能包（三方合并，本地进化不覆盖）
+  lichen promote <候选>       候选骨架晋升为正式技能
+  lichen adopt <路径>         手动收编本地技能
+  lichen run <技能>           手动执行入口：记录使用信号 + 打印提示（手动技能靠它进生命周期）
+  lichen install-hooks        把框架 hooks 注册进 harness settings.json
+  lichen uninstall-hooks      注销框架 hooks
+  lichen update-check         检查 borrowed 技能的上游漂移（只读，需网络）
+  lichen digest               打印当前摘要（调试用）
+  lichen evaluate <skill>     对比相邻两代指标（IMPROVED/NO CHANGE/DEGRADED）
+  lichen rollback <skill>     从版本快照回滚（当前版本先入快照库）
+  lichen archive <skill>      归档到 skills/.archive/（可复活）
+  lichen unarchive <skill>    从归档区复活
+  lichen trust <skill> <confirm|revoke>  人工确认/撤销信任
+  lichen hub init|use|status|migrate|publish|import|promote
+                                 hub 仓库：使用积累的 SSOT（ADR 0004，默认 ~/Skills）
+  lichen agents list|sync|doctor
+                                 多 agent 物化：hub → 各 agent 技能目录（技能级 symlink）
+
+设计宪法见 .agents/adr/0002-self-evolving-framework.md。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # framework/
+
+from lib import digest as digest_mod  # noqa: E402
+from lib import evaluate as evaluate_mod  # noqa: E402
+from lib import agents as agents_mod  # noqa: E402
+from lib import evolve, exchange, hub, hubloc, install_hooks, lifecycle, meta, paths  # noqa: E402
+from lib import lock as lock_mod  # noqa: E402
+from lib import signals as signals_mod  # noqa: E402
+from lib import taxonomy as taxonomy_mod  # noqa: E402
+
+
+def _print_evolution_summary(evo: dict) -> None:
+    c = evo.get("counters") or {}
+    print(f"  进化账本：信号 {c.get('signals', 0)} 条 · 请求 {c.get('requests', 0)} · "
+          f"收编 {c.get('adoptions', 0)} · 进化 {c.get('evolutions', 0)} · "
+          f"候选 {c.get('candidates', 0)} · 导出 {c.get('exports', 0)} · 导入 {c.get('imports', 0)}")
+    le = evo.get("last_evolve")
+    if le:
+        print(f"  最近自动进化：{le}（{evo.get('last_evolve_source', '?')}）")
+
+
+# ---------- 子命令 ----------
+
+def cmd_init(args) -> int:
+    paths.ensure_state()
+    if not paths.CONFIG_USER.exists():
+        paths.CONFIG_USER.write_text(
+            json.dumps({}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    evo = evolve.load_evolution()
+    if not evo.get("created"):
+        evo["created"] = evolve.now_iso()
+        evolve.save_evolution(evo)
+    print(f"运行状态已就绪：{paths.STATE_DIR}")
+    print("下一步：framework install-hooks（注册无感知自动层）")
+    print("      或直接 framework status 查看当前系统")
+    return 0
+
+
+def cmd_status(args) -> int:
+    paths.ensure_state()
+    evo = evolve.load_evolution()
+    skills = meta.list_repo_skills()
+    origins = {}
+    buckets = {}
+    unregistered = 0
+    for s in skills:
+        o = (s["meta"] or {}).get("origin") or "未登记"
+        origins[o] = origins.get(o, 0) + 1
+        buckets[s["bucket"]] = buckets.get(s["bucket"], 0) + 1
+        if not s["meta"]:
+            unregistered += 1
+    print(f"技能系统状态（仓库：{paths.REPO_ROOT}）")
+    print(f"├─ 技能 {len(skills)} 个：" + " · ".join(f"{k} {v}" for k, v in sorted(origins.items())))
+    print("├─ 分桶：" + " · ".join(f"{k} {v}" for k, v in sorted(buckets.items())))
+    # 场景轴分布（DDR-5：多标签，计数可超过技能总数）
+    cat_counts = {}
+    for s in skills:
+        for c in (meta.categories_of(s) or ["未分类"]):
+            cat_counts[c] = cat_counts.get(c, 0) + 1
+    if cat_counts:
+        cells = " · ".join(f"{c} {n}" for c, n in
+                           sorted(cat_counts.items(), key=lambda kv: (-kv[1], kv[0])))
+        print(f"├─ 场景分布：{cells}（framework list --category <名> 浏览）")
+    _print_evolution_summary(evo)
+
+    # 速率表（use/view/patch 三态；rate = loads / 请求数）
+    stats = evo.get("skills") or {}
+    hot = sorted(((sid, st.get("loads", 0), st.get("rate", 0.0))
+                  for sid, st in stats.items()), key=lambda x: -x[1])[:5]
+    if any(h[1] for h in hot):
+        cells = " · ".join(f"{sid} {n}次({r:.0%})" for sid, n, r in hot if n)
+        print(f"├─ 使用速率 Top5：{cells}")
+
+    archived = lifecycle.list_archived()
+    if archived:
+        print(f"├─ 归档区 {len(archived)} 个：" + ", ".join(a["id"] for a in archived)
+              + "（framework unarchive <名> 复活）")
+
+    cands = digest_mod.ready_candidates()
+    if cands:
+        print(f"├─ 候选 {len(cands)} 个待锻造：{', '.join(cands)}")
+        print("│    （framework promote <名> 晋升；证据见 state/candidates/<名>/EVIDENCE.md）")
+    pend = evo.get("pending") or []
+    if pend:
+        print(f"└─ 待人工裁决 {len(pend)} 项：")
+        for p in pend[:5]:
+            hint = f" → {p['hint']}" if p.get("hint") else ""
+            print(f"   · [{p.get('kind')}] {p.get('skill_id')}: {p.get('detail')}{hint}")
+    else:
+        print("└─ 无待办。系统静默运行中。")
+    return 0
+
+
+def cmd_evolve(args) -> int:
+    report = evolve.run_evolve(apply=args.apply, quiet=False, source="cli")
+    if report["errors"]:
+        return 1
+    return 0
+
+
+def cmd_run(args) -> int:
+    """手动执行入口（PRD v2 FR-11）：记录一次 load 信号并打印人工执行提示。
+
+    用途：execution=manual 的技能（要手机/GUI/凭据，agent 不在场或不能全自动）
+    被人工使用时，没有这一步，它对 probation/trust 生命周期就是隐形的——
+    手动执行的技能永远 loads=0，永远无法转正。run shim 让手动使用可见，
+    手动技能因此值得被纳入治理（.private 或公开桶）。
+    """
+    index = meta.index_by_id(meta.list_repo_skills())
+    skill = index.get(args.skill)
+    if not skill:
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（framework status 查看列表）")
+    m = skill["meta"] or {}
+    signals_mod.record("skill_use", skill_id=args.skill, subtype="load", via="run-shim")
+    fm = skill.get("fm") or {}
+    print(f"[run] {args.skill}"
+          f"（execution={m.get('execution', 'hybrid')} · trust={m.get('trust', True)}"
+          f" · generation={m.get('generation', '?')}）")
+    print(f"  目录：{skill['dir']}")
+    desc = (fm.get("description") or "").strip()
+    if desc:
+        print(f"  说明：{desc[:200]}")
+    print("  已记录一次使用信号（loads+1，喂给 probation/trust 判定）。")
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    paths.ensure_state()
+    problems, warns = [], []
+    tax = taxonomy_mod.load(paths.load_config())
+    uncategorized = []
+
+    evo = evolve.load_evolution()
+    if not paths.EVOLUTION_FILE.exists():
+        warns.append("evolution.json 尚未生成（跑一次 framework evolve）")
+
+    skills = meta.list_repo_skills()
+    for s in skills:
+        m = s["meta"]
+        if not m:
+            warns.append(f"{s['id']} 缺少 sidecar（evolve 会自动补登）")
+            continue
+        if m.get("origin") not in meta.VALID_ORIGINS:
+            problems.append(f"{s['id']} origin 非法: {m.get('origin')}")
+        if m.get("execution", "hybrid") not in ("auto", "manual", "hybrid"):
+            problems.append(f"{s['id']} execution 非法: {m.get('execution')}（auto|manual|hybrid）")
+        if m.get("kind", "skill") not in exchange.SUPPORTED_KINDS:
+            warns.append(f"{s['id']} kind={m.get('kind')} 本版本不支持（导入会挂起）")
+        actual = meta.invocation_of(s)
+        if m.get("invocation") and m["invocation"] != actual:
+            warns.append(f"{s['id']} sidecar.invocation={m['invocation']} 与 frontmatter({actual}) 不一致")
+        # 场景轴校验（DDR-5）：词表外标签警告（对方词表不同，保留但提示）；
+        # 无标签提醒回填（不拦——无标签只是浏览体验差，不是完整性问题）
+        valid, unknown = taxonomy_mod.normalize(m.get("categories"), tax)
+        if unknown:
+            warns.append(f"{s['id']} 场景标签不在词表内: {', '.join(unknown)}"
+                         "（词表见 config.default.json taxonomy，可扩展）")
+        if not m.get("categories"):
+            uncategorized.append(s["id"])
+
+    if uncategorized:
+        warns.append(f"{len(uncategorized)} 个技能无场景标签：{', '.join(uncategorized[:8])}"
+                     + ("…" if len(uncategorized) > 8 else "")
+                     + "（framework categorize --backfill 自动分类）")
+
+    registered = install_hooks.registered_in()
+    if registered:
+        print(f"PASS  hooks 已注册：{', '.join(str(p) for p in registered)}")
+    else:
+        warns.append("hooks 未注册（framework install-hooks）——自动层不工作，可用 CLI 手动 evolve")
+
+    if paths.SIGNALS_FILE.exists():
+        n = sum(1 for _ in open(paths.SIGNALS_FILE, encoding="utf-8"))
+        size = paths.SIGNALS_FILE.stat().st_size
+        print(f"INFO  信号文件：{n} 条 / {size // 1024} KB")
+    else:
+        print("INFO  信号文件：尚未产生")
+
+    vers = sum(1 for _ in paths.VERSIONS_DIR.rglob("SKILL.md")) if paths.VERSIONS_DIR.is_dir() else 0
+    print(f"INFO  版本快照：{vers} 个技能有历史版本（导入合并的 base 来源）")
+
+    rejected = [d.name for d in paths.CANDIDATES_DIR.iterdir()
+                if d.is_dir() and (d / "PROBLEMS.md").exists()] if paths.CANDIDATES_DIR.is_dir() else []
+    for r in rejected:
+        warns.append(f"候选 {r} 未过检，待人工处理（state/candidates/{r}/PROBLEMS.md）")
+
+    for w in warns:
+        print(f"WARN  {w}")
+    for p in problems:
+        print(f"FAIL  {p}")
+    if problems:
+        print(f"---\nFAIL: {len(problems)} 个问题")
+        return 1
+    print(f"---\nOK（{len(warns)} 条提醒）")
+    return 0
+
+
+def cmd_list(args) -> int:
+    """按场景分组浏览（DDR-5）。多标签技能出现在多个组——组内计数之和可超总数。"""
+    cfg = paths.load_config()
+    tax = taxonomy_mod.load(cfg)
+    skills = meta.list_repo_skills()
+    if args.category:
+        skills = [s for s in skills if args.category in meta.categories_of(s)]
+    if args.bucket:
+        skills = [s for s in skills if s["bucket"] == args.bucket]
+    if args.origin:
+        skills = [s for s in skills if (s["meta"] or {}).get("origin") == args.origin]
+    if not skills:
+        print("（没有匹配的技能）")
+        return 0
+
+    if args.json:
+        out = [{"id": s["id"], "bucket": s["bucket"],
+                "categories": meta.categories_of(s),
+                "origin": (s["meta"] or {}).get("origin"),
+                "generation": (s["meta"] or {}).get("generation"),
+                "execution": (s["meta"] or {}).get("execution", "hybrid")}
+               for s in skills]
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+        return 0
+
+    groups = {}
+    for s in skills:
+        for c in (meta.categories_of(s) or ["（未分类）"]):
+            groups.setdefault(c, []).append(s)
+    known = [c for c in tax if c in groups]
+    extra = sorted(c for c in groups if c not in tax and c != "（未分类）")
+    order = known + extra + (["（未分类）"] if "（未分类）" in groups else [])
+    print(f"技能清单（{len(skills)} 个 · 按场景分组 · 多标签技能出现在多组）")
+    for c in order:
+        label = tax[c]["label"] if c in tax else c
+        suffix = f"（{label}）" if c in tax else ("（关键词未命中，framework categorize 补）"
+                                            if c == "（未分类）" else "（词表外）")
+        print(f"\n■ {c}{suffix} — {len(groups[c])} 个")
+        for s in sorted(groups[c], key=lambda x: x["id"]):
+            m = s["meta"] or {}
+            print(f"    {s['id']:<26} {s['bucket']:<9} {m.get('origin', '?'):<12}"
+                  f" gen{m.get('generation', '?')}")
+    return 0
+
+
+def cmd_categorize(args) -> int:
+    """场景轴打标 / 修正（DDR-5）。词表见 config.default.json taxonomy（可扩展）。"""
+    cfg = paths.load_config()
+    tax = taxonomy_mod.load(cfg)
+    index = meta.index_by_id(meta.list_repo_skills())
+
+    if args.backfill:
+        # 手动触发全量回填（evolve 卫生预跑的显式版；适合首次迁移/改词表后重跑）
+        with lock_mod.file_lock(paths.EVOLUTION_LOCK, timeout=paths.LOCK_TIMEOUT) as locked:
+            if not locked:
+                print("（evolve 锁被占用——另一会话正在进化，稍后再试）")
+                return 0
+            n = evolve._auto_categorize(index, cfg)
+        remaining = sum(1 for s in index.values()
+                        if not (s["meta"] or {}).get("categories"))
+        tail = (f"（仍无标签 {remaining} 个——跑 framework evolve 补登后再来，"
+                "或 framework categorize <名> <场景> 手动补）" if remaining
+                else "（全部技能已有场景标签）")
+        print(f"OK 场景轴回填完成：新打标 {n} 个{tail}")
+        return 0
+
+    skill = index.get(args.skill)
+    if not skill:
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（framework list 查看）")
+    if not (skill["meta"] or {}).get("origin"):
+        raise SystemExit(f"ERROR: {args.skill} 没有 sidecar（先跑 framework evolve 补登）")
+
+    if args.auto:
+        cats = taxonomy_mod.classify(skill, tax)
+        if not cats:
+            print(f"（{args.skill} 关键词无命中——手动指定：framework categorize {args.skill} <场景>）")
+            return 0
+        print(f"分类结果（确定性关键词计分）：{', '.join(cats)}")
+    else:
+        if not args.cats:
+            raise SystemExit("ERROR: 请给出至少一个场景（如：framework categorize foo coding infra）")
+        cats = list(args.cats)
+
+    valid, unknown = taxonomy_mod.normalize(cats, tax)
+    if unknown:
+        print(f"WARN  词表外场景（仍写入；要收编进词表请编辑 config.default.json 的 taxonomy 节）: {', '.join(unknown)}")
+    with lock_mod.file_lock(paths.EVOLUTION_LOCK, timeout=paths.LOCK_TIMEOUT) as locked:
+        if not locked:
+            print("（evolve 锁被占用——另一会话正在进化，稍后再试）")
+            return 0
+        written = evolve.apply_categories(
+            skill, cats,
+            note=f"场景标签：{', '.join(cats)}" + ("（人工）" if not args.auto else "（--auto）"))
+    print(f"OK {args.skill} 场景标签 → {', '.join(written)}")
+    return 0
+
+
+def cmd_export(args) -> int:
+    r = exchange.export_pack(
+        name=args.name, out_dir=args.out, include_config=args.include_config,
+        mine_only=args.mine, skills=args.skill, buckets=args.bucket,
+        categories=args.category, dry=args.dry_run)
+    if r.get("dry"):
+        print(f"[dry-run] 将导出 {len(r['skills'])} 个技能 → {r['dir']}/")
+        for s in r["skills"]:
+            print(f"  · {s}")
+        return 0
+    print(f"OK 导出 {len(r['skills'])} 个技能 → {r['dir']}/")
+    print(f"OK zip → {r['zip']}（{r['bytes'] // 1024} KB）")
+    if r["configs"]:
+        print(f"OK 含配置 {r['configs']} 项（.agents/）")
+    print("分发（zip 私发 / git / 市场）由人执行——框架只生成本地包。")
+    return 0
+
+
+def cmd_import(args) -> int:
+    r = exchange.import_pack(args.src, dry=args.dry_run)
+    mode = "[dry-run] " if r.get("dry") else ""
+    print(f"{mode}导入技能包：{r['pack']}")
+    for k in ("installed", "updated", "skipped"):
+        for s in r.get(k) or []:
+            print(f"  · {k}: {s}")
+    for s in r.get("conflicts") or []:
+        print(f"  ✗ 冲突: {s}（对方版本已暂存 state/incoming/{s}/，本地版未动）")
+    for p in r.get("pending") or []:
+        print(f"  ⏳ {p.get('skill_id')}: {p.get('detail')}")
+    if not (r.get("conflicts") or r.get("pending")):
+        print("完成，无冲突。")
+    else:
+        print("有冲突/待裁决项——本地进化成果未被覆盖，人工处理后重跑。")
+    return 1 if (r.get("conflicts") or r.get("pending")) else 0
+
+
+def cmd_promote(args) -> int:
+    print("OK " + evolve.promote_candidate(args.slug))
+    print("提醒：晋升只是落地骨架，内容充实后记得 git 提交（publish.sh 仍管 push）")
+    return 0
+
+
+def cmd_adopt(args) -> int:
+    src = Path(args.path).expanduser().resolve()
+    if not (src / "SKILL.md").is_file():
+        raise SystemExit(f"ERROR: {src} 不是技能目录（缺 SKILL.md）")
+    if args.in_place:
+        m = meta.read_sidecar(src)
+        if m:
+            raise SystemExit(f"ERROR: {src} 已有 sidecar（origin={m.get('origin')}）")
+        fm = meta._read_fm(src / "SKILL.md")
+        cfg = paths.load_config()
+        cats = evolve._classify_new(src, src.name, fm, cfg, "local")
+        meta.write_sidecar(src, {
+            "kind": "skill", "visibility": "public", "execution": "hybrid",
+            "categories": cats,
+            "origin": "adopted", "source": str(src), "license": None,
+            "invocation": "model", "generation": 1,
+            "changelog": [{"gen": 1, "date": meta.today(),
+                           "change": "原地登记（framework adopt --in-place）"
+                                     + (f"；场景：{', '.join(cats)}" if cats else "")}],
+        })
+        print(f"OK 原地登记 {src.name}（权威副本留在原位）"
+              + (f"；场景：{', '.join(cats)}" if cats else ""))
+        return 0
+    d = {"tier": "T0", "kind": "adopt_local", "skill_id": src.name,
+         "detail": f"手动收编 {src}", "data": {"path": str(src), "ok": True, "problems": []}}
+    evo = evolve.load_evolution()
+    msg = evolve._do_adopt(d, evo)
+    evolve.save_evolution(evo)
+    print("OK " + (msg or f"{src.name} 无需收编"))
+    return 0
+
+
+def cmd_install_hooks(args) -> int:
+    reports = install_hooks.install(target=args.target, scope=args.scope,
+                                    plain=args.plain, dry=args.dry_run)
+    for p, msg in reports:
+        print(f"  {p}: {msg}")
+    if not reports:
+        print("没有找到目标 settings 文件。用 --file 不存在的路径会新建；"
+              "或先确认 harness 配置目录存在（~/.claude、~/.codebuddy、~/.workbuddy）。")
+    print("\n生效方式：重启会话（settings 变更不会热加载）。")
+    print("卸载：framework uninstall-hooks")
+    return 0
+
+
+def cmd_uninstall_hooks(args) -> int:
+    reports = install_hooks.uninstall(target=args.target, scope=args.scope, dry=args.dry_run)
+    for p, msg in reports:
+        print(f"  {p}: {msg}")
+    return 0
+
+
+def cmd_update_check(args) -> int:
+    """检查 borrowed（upstream）技能的上游漂移。只读+网络，默认不自动跑。"""
+    drifted = []
+    for s in meta.list_repo_skills():
+        m = s["meta"] or {}
+        if m.get("origin") != "upstream" or not m.get("source"):
+            continue
+        src = str(m["source"])
+        if not src.startswith("github:"):
+            continue
+        repo = src[len("github:"):].split("//")[0]
+        try:
+            out = subprocess.run(
+                ["git", "ls-remote", f"https://github.com/{repo}", "HEAD"],
+                capture_output=True, text=True, timeout=20)
+            head = out.stdout.split()[0] if out.stdout.strip() else ""
+        except (subprocess.TimeoutExpired, OSError, IndexError):
+            print(f"  ? {s['id']}: 无法连接上游 {repo}")
+            continue
+        ref = str(m.get("upstream_ref") or "")
+        if head and ref and not head.startswith(ref[:12]):
+            drifted.append((s["id"], repo, ref[:12], head[:12]))
+            print(f"  ↑ {s['id']}: 上游 {repo} 已更新（{ref[:12]} → {head[:12]}）")
+        else:
+            print(f"  = {s['id']}: 与上游一致（{ref[:12] or '未记录'}）")
+    if drifted:
+        print(f"\n{len(drifted)} 个技能有上游更新。同步走 skill-forge update 工作流"
+              "（三路合并 + 人工确认），框架不自动合并。")
+    return 0
+
+
+def cmd_digest(args) -> int:
+    evo = evolve.load_evolution()
+    d = evo.get("digest") or digest_mod.render(evo, paths.load_config())
+    print(d if d else "（无摘要——系统静默）")
+    return 0
+
+
+def cmd_evaluate(args) -> int:
+    index = meta.index_by_id(meta.list_repo_skills())
+    r = evaluate_mod.evaluate_skill(args.skill, index)
+    print(f"[evaluate] {r['skill']}：{r['verdict']}（{r['basis']}）")
+    for k in ("files", "refs", "lines", "desc_len", "hygiene"):
+        if k in r["prev"] and k in r["cur"]:
+            mark = "  " if r["prev"][k] == r["cur"][k] else "→"
+            print(f"   {mark} {k}: {r['prev'][k]} → {r['cur'][k]}")
+    for reason in r["reasons"]:
+        print(f"   · {reason}")
+    if not r["prev"]:
+        print("   （没有可对比的历史版本）")
+    return 0
+
+
+def cmd_rollback(args) -> int:
+    print("OK " + evaluate_mod.rollback_skill(args.skill, to_sha8=args.to or ""))
+    print("   当前版本已先入快照库，可再次回滚；记得 git 提交留档。")
+    return 0
+
+
+def cmd_archive(args) -> int:
+    index = meta.index_by_id(meta.list_repo_skills())
+    skill = index.get(args.skill)
+    if not skill:
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}")
+    print("OK 归档 → " + lifecycle.archive_skill(skill, reason=args.reason))
+    print("   复活：framework unarchive " + args.skill)
+    return 0
+
+
+def cmd_unarchive(args) -> int:
+    print("OK 复活 → " + lifecycle.unarchive_skill(args.skill))
+    return 0
+
+
+def cmd_trust(args) -> int:
+    index = meta.index_by_id(meta.list_repo_skills())
+    skill = index.get(args.skill)
+    if not skill:
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}")
+    on = args.action == "confirm"
+    print("OK " + lifecycle.confirm_trust(skill, on=on))
+    return 0
+
+
+# ---------- hub 子命令族（ADR 0004：使用积累的 SSOT） ----------
+
+def cmd_hub_init(args) -> int:
+    for m in hub.init():
+        print(m)
+    print("下一步：framework hub migrate（仓库个人层迁入）→ framework agents sync（物化到各 agent）")
+    return 0
+
+
+def cmd_hub_use(args) -> int:
+    p = hub.use(args.path)
+    print(f"OK hub 注册：{p}")
+    return 0
+
+
+def cmd_hub_status(args) -> int:
+    hub.status()
+    return 0
+
+
+def cmd_hub_migrate(args) -> int:
+    with lock_mod.file_lock(paths.EVOLUTION_LOCK, timeout=paths.LOCK_TIMEOUT) as locked:
+        if not locked:
+            print("（evolve 锁被占用——另一会话正在进化，稍后再试）")
+            return 0
+        msgs = hub.migrate(dry=args.dry_run)
+    for m in msgs:
+        print(m)
+    return 0
+
+
+def cmd_hub_publish(args) -> int:
+    return hub.publish(out=args.out, public=args.public, dry=args.dry_run)
+
+
+def cmd_hub_import(args) -> int:
+    print(hub.import_skill(args.path))
+    return 0
+
+
+def cmd_hub_promote(args) -> int:
+    print("OK " + hub.promote(args.skill))
+    return 0
+
+
+# ---------- agents 子命令族（hub 的视图层） ----------
+
+def cmd_agents_list(args) -> int:
+    print(f"agent 注册表（v1 内置，无配置；hub：{hubloc.hub_root()}）")
+    for ag in agents_mod.REGISTRY:
+        mark = "✓" if agents_mod.detected(ag) else "·"
+        print(f"  {mark} {ag['id']:<12} {ag['label']}")
+        print(f"      {ag.get('note', '')}")
+    print("\n✓ = 已检测安装 · · = 未检测（注册表保留，装了即生效）")
+    return 0
+
+
+def cmd_agents_sync(args) -> int:
+    r = agents_mod.sync(dry=args.dry_run, agent_filter=args.agent or "")
+    mode = "[dry-run] " if args.dry_run else ""
+    for m in r["created"]:
+        print(f"  + {mode}{m}")
+    for m in r["removed"]:
+        print(f"  - {m}")
+    if r["fresh"]:
+        print(f"  = {len(r['fresh'])} 条链接已是最新的")
+    for m in r["conflict"]:
+        print(f"  ✗ 冲突: {m}")
+    if r["skipped_agents"]:
+        print(f"  · 未检测到（跳过）: {', '.join(r['skipped_agents'])}")
+    if not args.dry_run and r["created"]:
+        print("提醒：链接即时生效；agent 首次出现 skills 目录时可能需重启会话才能发现。")
+    return 1 if r["conflict"] else 0
+
+
+def cmd_agents_doctor(args) -> int:
+    problems, warns, infos = agents_mod.doctor()
+    for i in infos:
+        print(f"INFO  {i}")
+    for w in warns:
+        print(f"WARN  {w}")
+    for p in problems:
+        print(f"FAIL  {p}")
+    if problems:
+        print(f"---\nFAIL: {len(problems)} 个问题")
+        return 1
+    print(f"---\nOK（{len(warns)} 条提醒）")
+    return 0
+
+
+# ---------- 入口 ----------
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="lichen", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("init", help="初始化运行状态（幂等）").set_defaults(fn=cmd_init)
+
+    p = sub.add_parser("status", help="系统状态")
+    p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("list", help="按场景分组浏览技能（多标签，DDR-5）")
+    p.add_argument("--category", help="只看指定场景（可配 --bucket/--origin 组合）")
+    p.add_argument("--bucket", help="只看指定桶")
+    p.add_argument("--origin", help="只看指定来源（adopted/local-forged/upstream）")
+    p.add_argument("--json", action="store_true", help="JSON 输出（脚本用）")
+    p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("categorize", help="场景轴打标/修正（DDR-5）")
+    p.add_argument("skill", nargs="?", help="技能 id")
+    p.add_argument("cats", nargs="*", help="场景标签（替换式；词表见 config.default.json taxonomy）")
+    p.add_argument("--auto", action="store_true", help="用关键词分类结果打标（确定性计分）")
+    p.add_argument("--backfill", action="store_true", help="给所有缺标签的技能自动分类")
+    p.set_defaults(fn=cmd_categorize)
+
+    p = sub.add_parser("evolve", help="分析信号并进化（--apply 落盘）")
+    p.add_argument("--apply", action="store_true", help="执行 T0（默认只预演）")
+    p.set_defaults(fn=cmd_evolve)
+
+    p = sub.add_parser("run", help="手动执行入口：记录使用信号 + 打印提示（手动执行的技能靠它进入生命周期）")
+    p.add_argument("skill", help="技能 id")
+    p.set_defaults(fn=cmd_run)
+
+    sub.add_parser("doctor", help="自检").set_defaults(fn=cmd_doctor)
+
+    p = sub.add_parser("export", help="导出技能包 skillpack/1")
+    p.add_argument("--name", help="包名（默认 skillpack-<日期>）")
+    p.add_argument("--out", help="输出目录（默认 dist/）")
+    p.add_argument("--include-config", action="store_true", help="携带 .agents/ 配置树")
+    p.add_argument("--mine", action="store_true", help="只导 local-forged + adopted（不含 borrowed）")
+    p.add_argument("--skill", action="append", help="只导指定技能（可重复）")
+    p.add_argument("--bucket", action="append", help="只导指定桶（可重复）")
+    p.add_argument("--category", action="append",
+                   help="只导指定场景（可重复；多标签命中其一即导，DDR-5）")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_export)
+
+    p = sub.add_parser("import", help="导入技能包（目录或 zip）")
+    p.add_argument("src", help="包路径（含 MANIFEST.json 的目录或 .zip）")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_import)
+
+    p = sub.add_parser("promote", help="候选骨架晋升为正式技能")
+    p.add_argument("slug", help="候选名（framework status 查看）")
+    p.set_defaults(fn=cmd_promote)
+
+    p = sub.add_parser("adopt", help="手动收编本地技能目录")
+    p.add_argument("path", help="技能目录（含 SKILL.md）")
+    p.add_argument("--in-place", action="store_true", help="原地登记，不复制进仓库")
+    p.set_defaults(fn=cmd_adopt)
+
+    p = sub.add_parser("install-hooks", help="注册框架 hooks 到 harness settings.json")
+    p.add_argument("--target", default="auto",
+                   help="claude|codebuddy|workbuddy|auto（默认 auto：探测已存在的配置目录）")
+    p.add_argument("--scope", default="user", choices=["user", "project"])
+    p.add_argument("--plain", action="store_true", help="命令写绝对路径（不经过 shell 的 runner 用）")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_install_hooks)
+
+    p = sub.add_parser("uninstall-hooks", help="注销框架 hooks")
+    p.add_argument("--target", default="auto")
+    p.add_argument("--scope", default="user", choices=["user", "project"])
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_uninstall_hooks)
+
+    sub.add_parser("update-check", help="检查 borrowed 技能上游漂移（只读）").set_defaults(fn=cmd_update_check)
+    sub.add_parser("digest", help="打印当前摘要").set_defaults(fn=cmd_digest)
+
+    p = sub.add_parser("evaluate", help="对比相邻两代指标（IMPROVED/NO CHANGE/DEGRADED）")
+    p.add_argument("skill", help="技能 id")
+    p.set_defaults(fn=cmd_evaluate)
+
+    p = sub.add_parser("rollback", help="从版本快照回滚（当前版本先入快照库）")
+    p.add_argument("skill", help="技能 id")
+    p.add_argument("--to", help="目标快照 sha8（默认最近一个）")
+    p.set_defaults(fn=cmd_rollback)
+
+    p = sub.add_parser("archive", help="归档技能到 skills/.archive/（可复活）")
+    p.add_argument("skill", help="技能 id")
+    p.add_argument("--reason", default="", help="归档原因（记入 changelog）")
+    p.set_defaults(fn=cmd_archive)
+
+    p = sub.add_parser("unarchive", help="从归档区复活技能")
+    p.add_argument("skill", help="技能 id")
+    p.set_defaults(fn=cmd_unarchive)
+
+    p = sub.add_parser("trust", help="人工确认/撤销技能信任")
+    p.add_argument("skill", help="技能 id")
+    p.add_argument("action", choices=["confirm", "revoke"], help="confirm=转正 / revoke=撤销")
+    p.set_defaults(fn=cmd_trust)
+
+    # ---- hub 子命令族（ADR 0004） ----
+    p = sub.add_parser("hub", help="hub 仓库：使用积累的 SSOT（init/use/status/migrate/publish/import/promote）")
+    hsub = p.add_subparsers(dest="hub_cmd", required=True)
+    hsub.add_parser("init", help="建 hub 仓库并注册（幂等，默认 ~/Skills）").set_defaults(fn=cmd_hub_init)
+    q = hsub.add_parser("use", help="注册已有目录为 hub（如 clone 别人的 hub）")
+    q.add_argument("path", help="目录路径（v1 仅本地；远程 URI 是预留扩展位）")
+    q.set_defaults(fn=cmd_hub_use)
+    hsub.add_parser("status", help="hub 一屏状态：三区计数/可见性/场景/git").set_defaults(fn=cmd_hub_status)
+    q = hsub.add_parser("migrate", help="一次性：仓库 skills/local、skills/.private → hub（默认全 private）")
+    q.add_argument("--dry-run", action="store_true", help="只预览迁移清单")
+    q.set_defaults(fn=cmd_hub_migrate)
+    q = hsub.add_parser("publish", help="push hub；--public 导出过滤树建干净公开 repo（hub 本体永不公开）")
+    q.add_argument("--public", action="store_true", help="导出 public 白名单子集（redact 守卫）")
+    q.add_argument("--out", help="--public 的导出目录（默认 <hub>-public）")
+    q.add_argument("--dry-run", action="store_true")
+    q.set_defaults(fn=cmd_hub_publish)
+    q = hsub.add_parser("import", help="外部技能 → 隔离区（F3：外部内容永不直接进入分发面）")
+    q.add_argument("path", help="技能目录（含 SKILL.md）")
+    q.set_defaults(fn=cmd_hub_import)
+    q = hsub.add_parser("promote", help="隔离区技能晋升到 hub 公开区（T1 审查后执行）")
+    q.add_argument("skill", help="技能 id")
+    q.set_defaults(fn=cmd_hub_promote)
+
+    # ---- agents 子命令族 ----
+    p = sub.add_parser("agents", help="多 agent 物化：hub → 各 agent 技能目录（视图层）")
+    asub = p.add_subparsers(dest="agents_cmd", required=True)
+    asub.add_parser("list", help="注册表与检测状态").set_defaults(fn=cmd_agents_list)
+    q = asub.add_parser("sync", help="物化：技能级 symlink（幂等；清理失效链，冲突不覆盖）")
+    q.add_argument("--agent", help="只处理指定 agent id（framework agents list 查看）")
+    q.add_argument("--dry-run", action="store_true")
+    q.set_defaults(fn=cmd_agents_sync)
+    asub.add_parser("doctor", help="物化体检：链接有效性/同名冲突/hub 结构").set_defaults(fn=cmd_agents_doctor)
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

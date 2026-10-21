@@ -1,0 +1,43 @@
+# Release：版本 bump（仍需人工合并 PR）
+# 触发：push 到 main
+# 职责：用 changesets 开版本 bump PR。
+# 注意：不开 release、不 push tag、不通知任何外部渠道——合版本 PR 由佐井本人决定，
+#       与 scripts/publish.sh 的人工确认门是同一原则：任何对外变化都要人点头。
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-save @changesets/cli
+
+      - name: Open / update version PR
+        run: npx changeset version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: version skills"
+            git push
+          fi

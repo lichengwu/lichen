@@ -1,0 +1,29 @@
+{
+  "origin": "upstream",
+  "source": "github:obra/superpowers//skills/writing-skills",
+  "license": "MIT",
+  "upstream_ref": "2026-10-20-intake",
+  "last_sync": "2026-10-20",
+  "local_edits": [
+    "SKILL.md 顶部增加中文适配说明块（上游原文不含）",
+    "跨技能相对引用 ../using-superpowers/references/ 已内联化为跨 harness 路径列表",
+    "补下载 render-graphs.js 与 graphviz-conventions.dot（上游同目录文件）"
+  ],
+  "invocation": "model",
+  "generation": 1,
+  "changelog": [
+    {
+      "gen": 1,
+      "date": "2026-10-20",
+      "change": "自 obra/superpowers 引入：SKILL.md + anthropic-best-practices.md + testing-skills-with-subagents.md + persuasion-principles.md + 图表脚本，MIT"
+    },
+    {
+      "gen": 1,
+      "date": "2026-10-21",
+      "change": "自动分类（关键词）：agent"
+    }
+  ],
+  "categories": [
+    "agent"
+  ]
+}

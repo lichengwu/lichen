@@ -1,0 +1,20 @@
+{
+  "kind": "skill",
+  "visibility": "public",
+  "execution": "manual",
+  "origin": "local-forged",
+  "source": null,
+  "license": "MIT",
+  "invocation": "model",
+  "generation": 1,
+  "changelog": [
+    {
+      "gen": 1,
+      "date": "2026-10-21",
+      "change": "框架化重构时新造：上游种子技能，管理 lichen 自身（starter 桶，fork 后可改可删）"
+    }
+  ],
+  "base_sha256": null,
+  "categories": ["agent"],
+  "execution_note": "manual：这是给人/ agent 查的手册，不是自动执行的技能"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "lichengwu",
+  "owner": {
+    "name": "lichengwu"
+  },
+  "plugins": [
+    {
+      "name": "lichengwu-skills",
+      "source": "./",
+      "description": "Field-tested skills from a home lab: infra ops, macOS, 3D making, and agent workflows.",
+      "version": "0.3.0"
+    }
+  ]
+}

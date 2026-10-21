@@ -1,0 +1,38 @@
+# 本地环境
+node_modules/
+.DS_Store
+
+# Python 编译产物（py_compile / import 产生，永不入库）
+__pycache__/
+*.pyc
+*.pyo
+
+# 本地元数据（永不入库，sync.sh 也会排除）
+_meta.json
+_skillhub_meta.json
+_icon.png
+
+# changeset 未发布草稿保留，其余忽略无
+
+# 临时
+*.tmp
+*.bak
+.scratch/
+
+# 打包产物（本地分发用，按需生成，不入库）
+dist/
+
+# framework 本地运行状态（信号/进化账本/版本快照/候选——进化痕迹留本地，不入库）
+framework/state/
+
+# 本地秘密存储（脱敏规则表与个人标识符监视清单——包含真实值，永不入库）。
+# 模板文件（*.template / *.template.txt）提交，真实值只放本地。见 scripts/redact.sh。
+scripts/redact.rules
+scripts/id-watchlist.txt
+
+# 私有技能桶（个人向/手动执行技能：纳入治理，永不公开——PRD v2 P-8）
+skills/.private/
+
+# 个人产品层（evolve 收编的个人技能：治理在仓库，内容永不公开。
+# 自有 fork 用 git add -f skills/local 显式入库——见 lichen-多Agent技能分发设计方案-v1.md §8.2）
+skills/local/

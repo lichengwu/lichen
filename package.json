@@ -1,0 +1,27 @@
+{
+  "name": "lichen",
+  "version": "0.5.3",
+  "private": true,
+  "description": "Self-evolving skill framework. Clone it, use your agent as usual — the framework grows your skill system in the background. Fork it and it becomes yours.",
+  "license": "MIT",
+  "scripts": {
+    "sync": "bash scripts/sync.sh",
+    "publish": "bash scripts/publish.sh",
+    "publish:push": "bash scripts/publish.sh --push",
+    "check": "bash scripts/check.sh",
+    "redact": "bash scripts/redact.sh",
+    "redact:apply": "bash scripts/apply-redaction.sh",
+    "changeset": "changeset",
+    "fw": "python3 framework/bin/lichen",
+    "fw:init": "python3 framework/bin/lichen init",
+    "fw:status": "python3 framework/bin/lichen status",
+    "fw:evolve": "python3 framework/bin/lichen evolve --apply",
+    "fw:doctor": "python3 framework/bin/lichen doctor",
+    "fw:export": "python3 framework/bin/lichen export",
+    "fw:import": "python3 framework/bin/lichen import",
+    "fw:install-hooks": "python3 framework/bin/lichen install-hooks"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0"
+  }
+}

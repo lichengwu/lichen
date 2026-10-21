@@ -1,0 +1,21 @@
+# 个人标识符监视清单模板（id-watchlist.template.txt）
+#
+# 用法：复制为 scripts/id-watchlist.txt（该文件名在 .gitignore 中，永不入库），
+#       填入本机的真实值，一行一个（grep -E 正则）。
+# 这些值出现在 skills/ 或 scripts/（白名单行除外）即视为泄漏，redact.sh 报警。
+#
+# 两种行：
+#   <pattern>        标识符类（handle/姓名）：redact.sh 内容扫描命中即 SOFT 告警
+#   cred:<pattern>   凭据类（密码/token/哈希）：以上 + publish.sh --push 时检查
+#                    git 历史——历史里还有明文即拒绝推送（先洗历史再推）。
+#                    本机已有：git filter-repo --replace-text <(printf '%s==><redacted>\n' <值>) --force
+#
+# 为什么单独放本地文件：监视清单必须包含真实值才有效，而包含真实值的文件
+# 绝不能进 git——这正是 2026-10-20 安全评审整改的核心（见 ADR / SCOPE.md）。
+# 仓库里只提交本模板；CI 与全新 clone 没有这份清单时，标识符监视自动降级
+# （redact.sh 会提示），硬红线扫描不受影响。
+
+# <your-github-handle>
+# <your-real-name>
+# cred:<known-password-or-token-value>
+# cred:<internal-hostname>

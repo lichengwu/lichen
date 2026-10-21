@@ -1,0 +1,33 @@
+# CI：检查门（不发布）
+# 触发：PR + push 到 main
+# 职责：secret scan + 结构检查 + 变化必须带 changeset
+# 注意：本 workflow 没有任何 push / release 动作——发布只走 scripts/publish.sh 的人工确认门
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Structure check
+        run: bash scripts/check.sh
+
+      - name: Secret scan (hard patterns fail the build)
+        run: bash scripts/redact.sh
+
+      - name: Changeset required for skill changes
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^skills/'; then
+            if ! git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^\.changeset/.*\.md$'; then
+              echo "::error::skills/ 有变更但缺少 changeset。跑 npx changeset 生成一个。"
+              exit 1
+            fi
+          fi
+          echo "changeset 检查通过"
