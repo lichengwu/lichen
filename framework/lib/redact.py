@@ -21,7 +21,7 @@ HARD_PATTERNS = [
     (r"BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY", "private key block"),
     (r"xox[baprs]-[A-Za-z0-9-]{10,}", "Slack token"),
     (r"AIza[0-9A-Za-z_-]{35}", "Google API key"),
-    (r"1[3-9][0-9]{9}", "手机号段（11 位，注意时间戳误报）"),
+    (r"(?<![0-9])1[3-9][0-9]{9}(?![0-9])", "手机号段（11 位）"),
     (r"[a-zA-Z0-9._%+-]+@(gmail|qq|163|outlook|foxmail|icloud|msn|hotmail|yahoo|sina|sohu|139|189)\.(com|cn)", "个人邮箱"),
 ]
 

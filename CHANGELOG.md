@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Redaction phone-number pattern now uses digit-boundary lookarounds, so
+  13-digit epoch millis (e.g. `"publishedAt": 1781935033901`) no longer
+  false-hit; real 11-digit phone numbers still match. Redact unit tests added.
 - `merge3.merge_text` dropped the trailing newline when merging text that
   ended with one, producing "no newline at end of file" diff noise in merged
   skills.

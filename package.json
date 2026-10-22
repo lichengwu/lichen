@@ -1,6 +1,6 @@
 {
   "name": "lichen",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Self-evolving skill framework. Clone it, use your agent as usual — the framework grows your skill system in the background. Fork it and it becomes yours.",
   "license": "MIT",
