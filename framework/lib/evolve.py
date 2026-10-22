@@ -209,7 +209,7 @@ def _print_report(r: dict) -> None:
     print(f"[evolve:{mode}] 计划 {r['planned']} 项（T0 自动 {r['t0']} / T1 人工 {r['t1']}）")
     if r.get("categorized"):
         verb = "已自动分类" if r["apply"] else "将自动分类"
-        print(f"  · 场景轴回填：{verb} {r['categorized']} 个技能（framework categorize 可修正）")
+        print(f"  · 场景轴回填：{verb} {r['categorized']} 个技能（lichen categorize 可修正）")
     if not r["apply"]:
         for d in r.get("plan") or []:
             print(f"  · [{d['kind']}] {d.get('skill_id', '')}: {d['detail']}")
@@ -222,7 +222,7 @@ def _print_report(r: dict) -> None:
     if not r["apply"] and r["t0"] and not r.get("rate_limited"):
         print("  （以上为计划，未落盘）")
     if r["pending"]:
-        print(f"  ⏳ 待人工裁决 {len(r['pending'])} 项（详见 framework status）")
+        print(f"  ⏳ 待人工裁决 {len(r['pending'])} 项（详见 lichen status）")
 
 
 # ---------- T0 执行器 ----------
@@ -391,7 +391,7 @@ def _stage_rejected(sid: str, src: Path, problems: list) -> str:
     cdir.mkdir(parents=True, exist_ok=True)
     lines = ["# 收编未过检", "", f"源：`{src}`", "", "## 问题", ""]
     lines += [f"- {p}" for p in problems]
-    lines += ["", "人工处理：修复上述问题后重跑 `framework evolve`，或 `framework promote " + sid + "` 强制晋升。"]
+    lines += ["", "人工处理：修复上述问题后重跑 `lichen evolve`，或 `lichen promote " + sid + "` 强制晋升。"]
     (cdir / "PROBLEMS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return f"暂存候选 {sid}（未过检：{problems[0] if problems else '?'}）"
 

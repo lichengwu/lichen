@@ -149,7 +149,7 @@ def unarchive_skill(skill_id: str) -> str:
             except OSError:
                 pass
             return str(dest)
-    raise SystemExit(f"ERROR: 归档区找不到 {skill_id}（framework status 查看列表）")
+    raise SystemExit(f"ERROR: 归档区找不到 {skill_id}（lichen status 查看列表）")
 
 
 def list_archived() -> list:
