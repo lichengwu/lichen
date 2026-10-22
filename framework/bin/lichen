@@ -72,8 +72,8 @@ def cmd_init(args) -> int:
         evo["created"] = evolve.now_iso()
         evolve.save_evolution(evo)
     print(f"运行状态已就绪：{paths.STATE_DIR}")
-    print("下一步：framework install-hooks（注册无感知自动层）")
-    print("      或直接 framework status 查看当前系统")
+    print("下一步：lichen install-hooks（注册无感知自动层）")
+    print("      或直接 lichen status 查看当前系统")
     return 0
 
 

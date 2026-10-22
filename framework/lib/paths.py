@@ -91,6 +91,11 @@ DEFAULT_CONFIG = {
 def _deep_merge(base: dict, override: dict) -> dict:
     out = copy.deepcopy(base)
     for k, v in (override or {}).items():
+        # 空列表视为未设置：上游模板（config.default.json）不含真实治理名单，
+        # 空键不得把代码默认值（DEFAULT_CONFIG 的 exclude/ignore 等）抹掉——
+        # C-1 整改后的教训：标准安装 state 为空时曾因此漏放 ignore 名单。
+        if isinstance(v, list) and not v:
+            continue
         if isinstance(v, dict) and isinstance(out.get(k), dict):
             out[k] = _deep_merge(out[k], v)
         else:

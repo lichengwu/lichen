@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `merge3.merge_text` dropped the trailing newline when merging text that
   ended with one, producing "no newline at end of file" diff noise in merged
   skills.
+- **Empty config lists no longer erase built-in defaults.** A fresh install
+  (empty `state/config.json`) plus the upstream template's empty
+  `exclude_skills`/`ignore_skills` keys overrode the code defaults, so noise
+  skills (xlsx/pptx) entered the adoption plan and excluded skills missed
+  their private bucket. Empty lists in config layers are now treated as
+  "not set", and the stale empty keys were removed from the template.
+- `lichen init` next-step hint referenced the old `framework` command name.
 
 ## [0.6.0] - 2026-10-21
 

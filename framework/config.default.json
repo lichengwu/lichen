@@ -25,57 +25,197 @@
     ".claude/skills",
     ".agents/skills"
   ],
-  "exclude_skills": [],
-  "ignore_skills": [],
   "taxonomy": {
     "infra": {
       "label": "基础设施",
-      "keywords": ["proxmox", "pve", "nas", "nfs", "iscsi", "docker", "compose", "windmill", "selfhost", "self-host", "ssh", "vnc", "k8s", "kubernetes", "服务器", "运维", "部署", "集群", "虚拟机"]
+      "keywords": [
+        "proxmox",
+        "pve",
+        "nas",
+        "nfs",
+        "iscsi",
+        "docker",
+        "compose",
+        "windmill",
+        "selfhost",
+        "self-host",
+        "ssh",
+        "vnc",
+        "k8s",
+        "kubernetes",
+        "服务器",
+        "运维",
+        "部署",
+        "集群",
+        "虚拟机"
+      ]
     },
     "macos": {
       "label": "macOS 系统",
-      "keywords": ["macos", "darwin", "homebrew", "brew", "kext", "launchd", "plist", "osascript", "defaults", "磁盘", "清理", "卸载"]
+      "keywords": [
+        "macos",
+        "darwin",
+        "homebrew",
+        "brew",
+        "kext",
+        "launchd",
+        "plist",
+        "osascript",
+        "defaults",
+        "磁盘",
+        "清理",
+        "卸载"
+      ]
     },
     "making": {
       "label": "制造/3D",
-      "keywords": ["3d", "print", "打印", "bambu", "拓竹", "3mf", "stl", "gcode", "fusion", "cad", "slicer", "切片", "建模", "mesh"]
+      "keywords": [
+        "3d",
+        "print",
+        "打印",
+        "bambu",
+        "拓竹",
+        "3mf",
+        "stl",
+        "gcode",
+        "fusion",
+        "cad",
+        "slicer",
+        "切片",
+        "建模",
+        "mesh"
+      ]
     },
     "coding": {
       "label": "编程开发",
-      "keywords": ["python", "typescript", "javascript", "git", "tdd", "testing", "lint", "refactor", "debug", "diagnos", "api", "mcp", "code", "bug", "编程", "代码", "重构", "编译"]
+      "keywords": [
+        "python",
+        "typescript",
+        "javascript",
+        "git",
+        "tdd",
+        "testing",
+        "lint",
+        "refactor",
+        "debug",
+        "diagnos",
+        "api",
+        "mcp",
+        "code",
+        "bug",
+        "编程",
+        "代码",
+        "重构",
+        "编译"
+      ]
     },
     "design": {
       "label": "设计",
-      "keywords": ["design", "figma", "sketch", "layout", "设计", "视觉", "配色", "字体", "版式"]
+      "keywords": [
+        "design",
+        "figma",
+        "sketch",
+        "layout",
+        "设计",
+        "视觉",
+        "配色",
+        "字体",
+        "版式"
+      ]
     },
     "office": {
       "label": "办公文档",
-      "keywords": ["docx", "xlsx", "pptx", "pdf", "word", "excel", "powerpoint", "表格", "文档", "幻灯片", "演示", "spreadsheet"]
+      "keywords": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "pdf",
+        "word",
+        "excel",
+        "powerpoint",
+        "表格",
+        "文档",
+        "幻灯片",
+        "演示",
+        "spreadsheet"
+      ]
     },
     "research": {
       "label": "调研信息",
-      "keywords": ["search", "搜索", "调研", "检索", "summarize", "总结", "摘要", "research", "ontology", "知识图谱", "fetch"]
+      "keywords": [
+        "search",
+        "搜索",
+        "调研",
+        "检索",
+        "summarize",
+        "总结",
+        "摘要",
+        "research",
+        "ontology",
+        "知识图谱",
+        "fetch"
+      ]
     },
     "agent": {
       "label": "智能体工程",
-      "keywords": ["agent", "subagent", "prompt", "claude", "智能体", "skill", "hook", "workflow", "brainstorm", "头脑风暴", "socratic"]
+      "keywords": [
+        "agent",
+        "subagent",
+        "prompt",
+        "claude",
+        "智能体",
+        "skill",
+        "hook",
+        "workflow",
+        "brainstorm",
+        "头脑风暴",
+        "socratic"
+      ]
     },
     "phone": {
       "label": "手机/安卓",
-      "keywords": ["android", "adb", "scrcpy", "手机", "安卓", "投屏", "apk"]
+      "keywords": [
+        "android",
+        "adb",
+        "scrcpy",
+        "手机",
+        "安卓",
+        "投屏",
+        "apk"
+      ]
     },
     "communication": {
       "label": "沟通协作",
-      "keywords": ["email", "mail", "slack", "message", "邮件", "通知", "协作"]
+      "keywords": [
+        "email",
+        "mail",
+        "slack",
+        "message",
+        "邮件",
+        "通知",
+        "协作"
+      ]
     },
     "daily": {
       "label": "日常/个人",
-      "keywords": ["daily", "每日", "签到", "奖励", "日常", "金币", "提醒"]
+      "keywords": [
+        "daily",
+        "每日",
+        "签到",
+        "奖励",
+        "日常",
+        "金币",
+        "提醒"
+      ]
     }
   },
   "category_defaults": {
-    "borrowed": ["agent"],
-    "starter": ["agent"]
+    "borrowed": [
+      "agent"
+    ],
+    "starter": [
+      "agent"
+    ]
   },
   "digest_max_lines": 3
 }
