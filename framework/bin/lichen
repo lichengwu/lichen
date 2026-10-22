@@ -147,10 +147,10 @@ def cmd_run(args) -> int:
     手动执行的技能永远 loads=0，永远无法转正。run shim 让手动使用可见，
     手动技能因此值得被纳入治理（.private 或公开桶）。
     """
-    index = meta.index_by_id(meta.list_repo_skills())
+    index = _skill_index()
     skill = index.get(args.skill)
     if not skill:
-        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（framework status 查看列表）")
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（lichen status 查看列表）")
     m = skill["meta"] or {}
     signals_mod.record("skill_use", skill_id=args.skill, subtype="load", via="run-shim")
     fm = skill.get("fm") or {}
@@ -202,7 +202,7 @@ def cmd_doctor(args) -> int:
     if uncategorized:
         warns.append(f"{len(uncategorized)} 个技能无场景标签：{', '.join(uncategorized[:8])}"
                      + ("…" if len(uncategorized) > 8 else "")
-                     + "（framework categorize --backfill 自动分类）")
+                     + "（lichen categorize --backfill 自动分类）")
 
     registered = install_hooks.registered_in()
     if registered:
@@ -271,7 +271,7 @@ def cmd_list(args) -> int:
     print(f"技能清单（{len(skills)} 个 · 按场景分组 · 多标签技能出现在多组）")
     for c in order:
         label = tax[c]["label"] if c in tax else c
-        suffix = f"（{label}）" if c in tax else ("（关键词未命中，framework categorize 补）"
+        suffix = f"（{label}）" if c in tax else ("（关键词未命中，lichen categorize 补）"
                                             if c == "（未分类）" else "（词表外）")
         print(f"\n■ {c}{suffix} — {len(groups[c])} 个")
         for s in sorted(groups[c], key=lambda x: x["id"]):
@@ -285,7 +285,7 @@ def cmd_categorize(args) -> int:
     """场景轴打标 / 修正（DDR-5）。词表见 config.default.json taxonomy（可扩展）。"""
     cfg = paths.load_config()
     tax = taxonomy_mod.load(cfg)
-    index = meta.index_by_id(meta.list_repo_skills())
+    index = _skill_index()
 
     if args.backfill:
         # 手动触发全量回填（evolve 卫生预跑的显式版；适合首次迁移/改词表后重跑）
@@ -296,27 +296,27 @@ def cmd_categorize(args) -> int:
             n = evolve._auto_categorize(index, cfg)
         remaining = sum(1 for s in index.values()
                         if not (s["meta"] or {}).get("categories"))
-        tail = (f"（仍无标签 {remaining} 个——跑 framework evolve 补登后再来，"
-                "或 framework categorize <名> <场景> 手动补）" if remaining
+        tail = (f"（仍无标签 {remaining} 个——跑 lichen evolve 补登后再来，"
+                "或 lichen categorize <名> <场景> 手动补）" if remaining
                 else "（全部技能已有场景标签）")
         print(f"OK 场景轴回填完成：新打标 {n} 个{tail}")
         return 0
 
     skill = index.get(args.skill)
     if not skill:
-        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（framework list 查看）")
+        raise SystemExit(f"ERROR: 技能不存在: {args.skill}（lichen list 查看）")
     if not (skill["meta"] or {}).get("origin"):
-        raise SystemExit(f"ERROR: {args.skill} 没有 sidecar（先跑 framework evolve 补登）")
+        raise SystemExit(f"ERROR: {args.skill} 没有 sidecar（先跑 lichen evolve 补登）")
 
     if args.auto:
         cats = taxonomy_mod.classify(skill, tax)
         if not cats:
-            print(f"（{args.skill} 关键词无命中——手动指定：framework categorize {args.skill} <场景>）")
+            print(f"（{args.skill} 关键词无命中——手动指定：lichen categorize {args.skill} <场景>）")
             return 0
         print(f"分类结果（确定性关键词计分）：{', '.join(cats)}")
     else:
         if not args.cats:
-            raise SystemExit("ERROR: 请给出至少一个场景（如：framework categorize foo coding infra）")
+            raise SystemExit("ERROR: 请给出至少一个场景（如：lichen categorize foo coding infra）")
         cats = list(args.cats)
 
     valid, unknown = taxonomy_mod.normalize(cats, tax)
@@ -466,7 +466,7 @@ def cmd_digest(args) -> int:
 
 
 def cmd_evaluate(args) -> int:
-    index = meta.index_by_id(meta.list_repo_skills())
+    index = _skill_index()
     r = evaluate_mod.evaluate_skill(args.skill, index)
     print(f"[evaluate] {r['skill']}：{r['verdict']}（{r['basis']}）")
     for k in ("files", "refs", "lines", "desc_len", "hygiene"):
@@ -502,7 +502,7 @@ def cmd_unarchive(args) -> int:
 
 
 def cmd_trust(args) -> int:
-    index = meta.index_by_id(meta.list_repo_skills())
+    index = _skill_index()
     skill = index.get(args.skill)
     if not skill:
         raise SystemExit(f"ERROR: 技能不存在: {args.skill}")
@@ -602,6 +602,20 @@ def cmd_agents_doctor(args) -> int:
 
 
 # ---------- 入口 ----------
+
+def _skill_index() -> dict:
+    """按 id 定位技能：安装目录 skills/ 优先，hub 三区兜底。
+
+    收编目标已是 hub（ADR 0004），治理命令（categorize/trust/evaluate/run）
+    必须对 hub 技能同样可见，否则收编后即"失明"。
+    """
+    index = meta.index_by_id(meta.list_repo_skills())
+    for s in hub.list_hub_skills():
+        s = dict(s)
+        s.setdefault("bucket", s.get("zone"))
+        index.setdefault(s["id"], s)
+    return index
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

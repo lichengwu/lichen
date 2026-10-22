@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Governance commands (`categorize` / `trust` / `evaluate` / `run`) now see
+  hub skills: adoption targets the hub, but these id-lookup commands only
+  scanned the install directory, so adopted skills were invisible right after
+  adoption. Repo lookup stays first, hub zones fill in as fallback.
 - Redaction phone-number pattern now uses digit-boundary lookarounds, so
   13-digit epoch millis (e.g. `"publishedAt": 1781935033901`) no longer
   false-hit; real 11-digit phone numbers still match. Redact unit tests added.
